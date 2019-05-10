@@ -76,7 +76,7 @@ proto: ## Rebuild protobuf files
 .PHONY: install-sim
 install-sim: ## install storj-sim
 	@echo "Running ${@}"
-	@go install -race -v storj.io/storj/cmd/storj-sim storj.io/storj/cmd/versioncontrol storj.io/storj/cmd/bootstrap storj.io/storj/cmd/satellite storj.io/storj/cmd/storagenode storj.io/storj/cmd/uplink storj.io/storj/cmd/gateway storj.io/storj/cmd/identity storj.io/storj/cmd/certificates
+	@go install -race -v storj.io/storj/cmd/storj-sim storj.io/storj/cmd/versioncontrol storj.io/storj/cmd/statreceiver storj.io/storj/cmd/bootstrap storj.io/storj/cmd/satellite storj.io/storj/cmd/storagenode storj.io/storj/cmd/uplink storj.io/storj/cmd/gateway storj.io/storj/cmd/identity storj.io/storj/cmd/certificates
 
 ##@ Test
 
@@ -124,7 +124,7 @@ test-all-in-one: ## Test docker images locally
 ##@ Build
 
 .PHONY: images
-images: satellite-image storagenode-image uplink-image gateway-image versioncontrol-image ## Build gateway, satellite, storagenode, uplink and versioncontrol Docker images
+images: satellite-image storagenode-image uplink-image gateway-image statreceiver-image versioncontrol-image ## Build gateway, satellite, statreceiver, storagenode, uplink and versioncontrol Docker images
 	echo Built version: ${TAG}
 
 .PHONY: gateway-image
@@ -148,6 +148,13 @@ storagenode-image: storagenode_linux_arm storagenode_linux_amd64 ## Build storag
 	${DOCKER_BUILD} --pull=true -t storjlabs/storagenode:${TAG}${CUSTOMTAG}-arm32v6 \
 		--build-arg=GOARCH=arm --build-arg=DOCKER_ARCH=arm32v6 \
 		-f cmd/storagenode/Dockerfile .
+.PHONY: statreceiver-image
+statreceiver-image: statreceiver_linux_arm statreceiver_linux_amd64 ## Build statreceiver Docker image
+	${DOCKER_BUILD} --pull=true -t storjlabs/statreceiver:${TAG}${CUSTOMTAG}-amd64 \
+		-f cmd/statreceiver/Dockerfile .
+	${DOCKER_BUILD} --pull=true -t storjlabs/statreceiver:${TAG}${CUSTOMTAG}-arm32v6 \
+		--build-arg=GOARCH=arm --build-arg=DOCKER_ARCH=arm32v6 \
+		-f cmd/statreceiver/Dockerfile .
 .PHONY: uplink-image
 uplink-image: uplink_linux_arm uplink_linux_amd64 ## Build uplink Docker image
 	${DOCKER_BUILD} --pull=true -t storjlabs/uplink:${TAG}${CUSTOMTAG}-amd64 \
@@ -197,6 +204,9 @@ satellite_%:
 .PHONY: storagenode_%
 storagenode_%:
 	$(MAKE) binary-check COMPONENT=storagenode GOARCH=$(word 3, $(subst _, ,$@)) GOOS=$(word 2, $(subst _, ,$@))
+.PHONY: statreceiver_%
+statreceiver_%:
+	$(MAKE) binary-check COMPONENT=statreceiver GOARCH=$(word 3, $(subst _, ,$@)) GOOS=$(word 2, $(subst _, ,$@))
 .PHONY: binary-check
 binary-check:
 	@if [ -f release/${TAG}/${COMPONENT}_${GOOS}_${GOARCH} ]; then echo "release/${TAG}/${COMPONENT}_${GOOS}_${GOARCH} exists"; else $(MAKE) binary; fi
@@ -217,11 +227,11 @@ inspector_%:
 versioncontrol_%:
 	GOOS=$(word 2, $(subst _, ,$@)) GOARCH=$(word 3, $(subst _, ,$@)) COMPONENT=versioncontrol $(MAKE) binary
 
-COMPONENTLIST := gateway satellite storagenode uplink identity certificates inspector versioncontrol
+COMPONENTLIST := gateway satellite storagenode statreceiver uplink identity certificates inspector versioncontrol
 OSARCHLIST    := darwin_amd64 linux_amd64 linux_arm windows_amd64
 BINARIES      := $(foreach C,$(COMPONENTLIST),$(foreach O,$(OSARCHLIST),$C_$O))
 .PHONY: binaries
-binaries: ${BINARIES} ## Build gateway, satellite, storagenode, uplink, identity, and certificates binaries (jenkins)
+binaries: ${BINARIES} ## Build gateway, satellite, statreceiver, storagenode, uplink, identity, and certificates binaries (jenkins)
 
 ##@ Deploy
 
@@ -236,7 +246,7 @@ deploy: ## Update Kubernetes deployments in staging (jenkins)
 push-images: ## Push Docker images to Docker Hub (jenkins)
 	# images have to be pushed before a manifest can be created
 	# satellite
-	for c in satellite storagenode uplink gateway versioncontrol; do \
+	for c in satellite storagenode uplink statreceiver gateway versioncontrol; do \
 		docker push storjlabs/$$c:${TAG}${CUSTOMTAG}-amd64 \
 		&& docker push storjlabs/$$c:${TAG}${CUSTOMTAG}-arm32v6 \
 		&& for t in ${TAG}${CUSTOMTAG} ${LATEST_TAG}; do \
@@ -267,6 +277,7 @@ clean-images:
 	-docker rmi storjlabs/satellite:${TAG}${CUSTOMTAG}
 	-docker rmi storjlabs/storagenode:${TAG}${CUSTOMTAG}
 	-docker rmi storjlabs/uplink:${TAG}${CUSTOMTAG}
+	-docker rmi storjlabs/statreceiver:${TAG}${CUSTOMTAG}
 
 .PHONY: test-docker-clean
 test-docker-clean: ## Clean up Docker environment used in test-docker target
