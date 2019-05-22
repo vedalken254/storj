@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zeebo/errs"
+
 	"storj.io/storj/satellite/marketing"
 	dbx "storj.io/storj/satellite/satellitedb/dbx"
 )
